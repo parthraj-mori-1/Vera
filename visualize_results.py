@@ -293,6 +293,119 @@ fig.savefig(f'{FIG_DIR}/6_summary_card.png', bbox_inches='tight')
 plt.close(fig)
 
 
+# --------------------------------------------------------------------------- #
+# FIGURE 7 — Pie chart: dataset composition (anomaly vs normal videos)
+# --------------------------------------------------------------------------- #
+fig, ax = plt.subplots(figsize=(7, 7))
+sizes = [n_anom, n_norm]
+labels = [f'Anomalous\n({n_anom} videos)', f'Normal\n({n_norm} videos)']
+wedges, texts, autotexts = ax.pie(
+    sizes, labels=labels, colors=[RED, BLUE], autopct='%1.1f%%',
+    startangle=90, explode=(0.05, 0), shadow=True,
+    textprops={'fontsize': 12, 'fontweight': 'bold'},
+    wedgeprops={'edgecolor': 'white', 'linewidth': 2})
+for at in autotexts:
+    at.set_color('white'); at.set_fontsize(14)
+ax.set_title('Test Set Composition — UCF-Crime')
+fig.savefig(f'{FIG_DIR}/7_dataset_pie.png', bbox_inches='tight')
+plt.close(fig)
+
+
+# --------------------------------------------------------------------------- #
+# FIGURE 8 — Pie chart: frame-level classification outcome
+# (confusion-matrix breakdown at the chosen threshold)
+# --------------------------------------------------------------------------- #
+pred_pos = all_scores > THRESHOLD
+tp = int(np.sum((pred_pos) & (all_gt == 1)))
+fp = int(np.sum((pred_pos) & (all_gt == 0)))
+tn = int(np.sum((~pred_pos) & (all_gt == 0)))
+fn = int(np.sum((~pred_pos) & (all_gt == 1)))
+
+fig, ax = plt.subplots(figsize=(7.5, 7))
+parts = [tp, tn, fp, fn]
+plabels = ['True Positive\n(anomaly caught)',
+           'True Negative\n(normal correct)',
+           'False Positive\n(false alarm)',
+           'False Negative\n(missed anomaly)']
+pcolors = [GREEN, BLUE, '#f59e0b', RED]
+wedges, texts, autotexts = ax.pie(
+    parts, labels=plabels, colors=pcolors, autopct='%1.1f%%',
+    startangle=140, textprops={'fontsize': 11, 'fontweight': 'bold'},
+    wedgeprops={'edgecolor': 'white', 'linewidth': 2})
+for at in autotexts:
+    at.set_color('white'); at.set_fontsize(12)
+ax.set_title(f'Frame Classification Outcome (threshold = {THRESHOLD})')
+fig.savefig(f'{FIG_DIR}/8_frame_outcome_pie.png', bbox_inches='tight')
+plt.close(fig)
+
+
+# --------------------------------------------------------------------------- #
+# FIGURE 9 — Detection coverage per video (how much of each real anomaly
+# region VERA actually flagged).  Bar chart, sorted, only anomaly videos.
+# --------------------------------------------------------------------------- #
+coverage = []   # (key, percent of true-anomaly frames detected)
+for key, fs, gt in per_video:
+    if gt.max() == 0:
+        continue
+    anomaly_idx = gt == 1
+    detected = np.sum((fs > THRESHOLD) & anomaly_idx)
+    total = np.sum(anomaly_idx)
+    coverage.append((key, 100.0 * detected / total if total else 0.0))
+
+coverage.sort(key=lambda x: x[1], reverse=True)
+# show top 20 for readability
+top = coverage[:20]
+keys = [k for k, _ in top]
+vals = [v for _, v in top]
+
+fig, ax = plt.subplots(figsize=(11, 8))
+bar_colors = [GREEN if v >= 60 else ('#f59e0b' if v >= 30 else RED) for v in vals]
+ax.barh(keys[::-1], vals[::-1], color=bar_colors[::-1], edgecolor='black', linewidth=0.4)
+ax.set_xlabel('% of true-anomaly frames detected')
+ax.set_title('Per-Video Detection Coverage (top 20 anomaly videos)')
+ax.set_xlim(0, 100)
+avg_cov = np.mean([v for _, v in coverage]) if coverage else 0
+ax.axvline(avg_cov, ls='--', color='black', alpha=0.6,
+           label=f'Average = {avg_cov:.1f}%')
+ax.legend(loc='lower right')
+fig.savefig(f'{FIG_DIR}/9_detection_coverage.png', bbox_inches='tight')
+plt.close(fig)
+
+
+# --------------------------------------------------------------------------- #
+# FIGURE 10 — Confusion matrix heatmap (the numbers behind figure 8)
+# --------------------------------------------------------------------------- #
+cm = np.array([[tn, fp], [fn, tp]])
+fig, ax = plt.subplots(figsize=(6.5, 6))
+im = ax.imshow(cm, cmap='Blues')
+ax.set_xticks([0, 1]); ax.set_yticks([0, 1])
+ax.set_xticklabels(['Pred Normal', 'Pred Anomaly'])
+ax.set_yticklabels(['True Normal', 'True Anomaly'])
+ax.set_title(f'Confusion Matrix (frame-level, thr={THRESHOLD})')
+thresh = cm.max() / 2
+for i in range(2):
+    for j in range(2):
+        ax.text(j, i, f'{cm[i, j]:,}', ha='center', va='center',
+                fontsize=16, fontweight='bold',
+                color='white' if cm[i, j] > thresh else 'black')
+ax.grid(False)
+fig.colorbar(im, fraction=0.046, pad=0.04)
+fig.savefig(f'{FIG_DIR}/10_confusion_matrix.png', bbox_inches='tight')
+plt.close(fig)
+
+
+# --------------------------------------------------------------------------- #
+# Precision / Recall / F1 at the chosen threshold (printed for your slides)
+# --------------------------------------------------------------------------- #
+precision = tp / (tp + fp) if (tp + fp) else 0
+recall    = tp / (tp + fn) if (tp + fn) else 0
+f1        = 2 * precision * recall / (precision + recall) if (precision + recall) else 0
+print('\nFrame-level metrics @ threshold %.2f:' % THRESHOLD)
+print(f'  Precision = {precision*100:.1f}%')
+print(f'  Recall    = {recall*100:.1f}%')
+print(f'  F1-score  = {f1*100:.1f}%')
+
+
 print('\nSaved figures to ./%s/' % FIG_DIR)
 for f in sorted(os.listdir(FIG_DIR)):
     print('  -', f)
